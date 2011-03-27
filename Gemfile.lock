@@ -1,0 +1,21 @@
+GIT
+  remote: git://github.com/chuckremes/ffi-rzmq.git
+  revision: 0caeeb725d01ebda9c936b1b4a1ae6cbdaafb78b
+  specs:
+    ffi-rzmq (0.7.2)
+
+GEM
+  remote: http://rubygems.org/
+  specs:
+    ffi (1.0.7)
+      rake (>= 0.8.7)
+    msgpack (0.4.4)
+    rake (0.8.7)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  ffi
+  ffi-rzmq!
+  msgpack

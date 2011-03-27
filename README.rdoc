@@ -1,0 +1,46 @@
+== MsgPipe (aka zpipe)
+
+Experiment combining MsgPack and ZeroMQ to create a simple RPC client/server framework.
+
+Actually inspired by: https://github.com/tobi/messagepipe (hi tobi)
+
+
+== Examples (simple)
+
+  git clone git://github.com/thheller/zpipe.git
+  cd zpipe
+  rvm 1.9.2
+  bundle install
+
+  bundle exec ruby run_server.rb
+  bundle exec ruby run_client.rb
+  bundle exec ruby benchmark.rb
+
+== Examples (queue/broker)
+
+  bundle exec ruby run_broker.rb
+  bundle exec ruby run_workers.rb 10
+  bundle exec ruby run_multiple.rb 10 10
+
+Should result in something like: "Finished after: 10.149190902709961".
+
+Forks 10 Workers, then runs 10 clients with 10 requests each, each request just sleeps for a sec. Try running 5 Workers with 10/10 Clients. Should be arround 20 secs total. Not really useful to run the benchmark against multiple workers since the overhead of the broker will make it slower than one server (although not by much).
+
+== Disclaimer
+
+Dont ever use this!!! Its more a proof-of-concept than anything else.
+
+Not actually using this anywhere, just needed an excuse to play with ZeroMQ cause its awesome (and EventMachine/Threads are evil).
+
+It might leave the broker and/or clients in unstable/hanging states when a worker dies. Also CTRL-C may act funny since I dont really clean up.
+
+Only tested with (if you call this testing):
+
+* macosx
+* ruby 1.9.2p180 (rvm)
+* zeromq 2.1.3 (brew install zeromq)
+
+== TODO
+
+Nothing, experiment done. ZeroMQ is fun!
+
