@@ -26,6 +26,25 @@ Should result in something like: "Finished after: 10.149190902709961".
 
 Forks 10 Workers, then runs 10 clients with 10 requests each, each request just sleeps for a sec. Try running 5 Workers with 10/10 Clients. Should be arround 20 secs total. Not really useful to run the benchmark against multiple workers since the overhead of the broker will make it slower than one server (although not by much).
 
+== Examples (task distribution / fanout)
+
+  bundle exec ruby run_task_dealer.rb
+  bundle exec ruby run_task_workers.rb
+  bundle exec ruby run_task.rb &
+  # run as many as you like
+
+This might look alot of code but what it actually does is awesome. The Task Dealer accepts RPC Requests in form of
+
+  [task_id, { task_name => [method, [arg1,arg2,...], ... }, timeout_in_sec]
+
+It will then distribute all given subtasks (each hash value) among the workers and collect the results. Either alll results will be returned, or in case of the timeout only those that already have been collected will be returned.
+
+The Result will look like:
+
+  [{task_name => result_value, ...}, [timed_out_task_name, ...]]
+
+All the credit goes to ZeroMQ for being awesome.
+
 == Disclaimer
 
 Dont ever use this!!! Its more a proof-of-concept than anything else.
@@ -33,6 +52,8 @@ Dont ever use this!!! Its more a proof-of-concept than anything else.
 Not actually using this anywhere, just needed an excuse to play with ZeroMQ cause its awesome (and EventMachine/Threads are evil).
 
 It might leave the broker and/or clients in unstable/hanging states when a worker dies. Also CTRL-C may act funny since I dont really clean up.
+
+Also the task distribution thing has so many things unaddressed its not even funny (mainly exceptions, worker deaths, etc). I'm lazy ...
 
 Only tested with (if you call this testing):
 

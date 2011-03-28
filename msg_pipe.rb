@@ -41,6 +41,12 @@ module MsgPipe
         yield(pipe.client(address))
       end
     end
+
+    def contact_dealer(address)
+      run do |pipe|
+        yield(pipe.contact_dealer(address))
+      end
+    end
   end
 
   class Context
@@ -52,6 +58,11 @@ module MsgPipe
     def shutdown
       @sockets.each { |it| it.close }
       @context.terminate
+    end
+
+    def socket(type)
+      @sockets << socket = @context.socket(type)
+      socket
     end
 
     def broker(frontend, backend)
@@ -85,6 +96,13 @@ module MsgPipe
 
       MsgClient.new(self, socket, server_address)
     end
+
+    def contact_dealer(address)
+      @sockets << socket = @context.socket(ZMQ::REQ)
+      socket.connect(address)
+
+      MsgDealer.new(self, socket, address)
+    end
   end
 
   class RemoteError < StandardError
@@ -93,6 +111,8 @@ module MsgPipe
   class InvalidResponse < StandardError
   end
 
+  # simple client/server rpc
+  #
   class MsgClient
     def initialize(pipe, socket, address)
       @pipe = pipe
@@ -150,5 +170,56 @@ module MsgPipe
       end
     end
   end
+
+  # little more involved client -> dealer -> fanout -> fanin -> reply
+  class MsgDealer
+    def initialize(pipe, socket, address)
+      @pipe = pipe
+      @socket = socket
+      @address = address 
+    end
+
+    attr_reader :socket
+
+    def new_task()
+      MsgTask.new(self) 
+    end
+  end
+
+  class MsgTask
+    def initialize(dealer)
+      @dealer = dealer
+      @task_id = Digest::MD5.hexdigest([Time.now.to_f, rand(), rand()].join(":"))
+      @tasks = {}
+
+      @results = {}
+      @timeouts = []
+    end
+
+    def add(task_name, method, *args)
+      @tasks[task_name] = [method, args]
+    end
+
+    attr_reader :results, :timeouts
+
+    # I have one speed, one gear: GO!
+    def go!(timeout)
+      @dealer.socket.send_string([@task_id, @tasks, timeout].to_msgpack)
+      completed, timeouts = MessagePack.unpack(@dealer.socket.recv_string)
+
+      @results = {}
+      completed.each do |k, v|
+        @results[k.to_sym] = v
+      end
+
+      @timeouts = timeouts
+    end
+    
+    def all_done?
+      @timeouts.empty? and @results.size == @tasks.size
+    end
+
+  end
+
 end
 
