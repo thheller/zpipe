@@ -1,16 +1,28 @@
 require 'rubygems'
-require 'bundler/setup'
+require 'bundler'
 
-require 'ffi-rzmq'
-require 'msgpack'
+Bundler.setup
+Bundler.require(:default, 'development')
 
 module MsgPipe
   REPLY_OK = 0x01
   REPLY_ERROR = 0x02
 
   class << self
+
+    # should only call this once per process
+    # should probably check this somehow and fail!
     def run
       pipe = Context.new()
+
+      ['INT'].each do |sig|
+        Signal.trap(sig) do
+          puts "Process received #{sig}, shutting down pipe."
+          pipe.shutdown
+          exit(1)
+        end
+      end
+
       begin
         yield(pipe)
       ensure
@@ -57,23 +69,12 @@ module MsgPipe
 
     def shutdown
       @sockets.each { |it| it.close }
-      @context.terminate
+      @context.close
     end
 
     def socket(type)
       @sockets << socket = @context.socket(type)
       socket
-    end
-
-    def broker(frontend, backend)
-      @sockets << fs = @context.socket(ZMQ::XREP)
-      @sockets << bs = @context.socket(ZMQ::XREQ)
-
-      fs.bind(frontend)
-      bs.bind(backend)
-
-      puts 'starting broker'
-      ZMQ::Device.new(ZMQ::QUEUE, fs, bs)
     end
 
     def worker(address, handler)
@@ -121,9 +122,9 @@ module MsgPipe
     end
 
     def call(method, *args)
-      @socket.send_string([method, args].to_msgpack)
+      @socket.send([method, args].to_msgpack)
 
-      result = @socket.recv_string()
+      result = @socket.recv()
       result_type, result = MessagePack.unpack(result)
       case result_type
       when REPLY_OK
@@ -147,26 +148,21 @@ module MsgPipe
     end
 
     def work!
-      begin
-        while msg = @socket.recv_string
-          method, args = MessagePack.unpack(msg)
+      while msg = @socket.recv
+        method, args = MessagePack.unpack(msg)
 
-          result = @default_result
+        result = @default_result
 
+        begin
           begin
-            begin
-              result = [REPLY_OK, @handler.public_send(method, *args)]
-            rescue => e
-              result = [REPLY_ERROR, "#{e.class}:#{e.message}"]
-            end
-
-          ensure
-            @socket.send_string(result.to_msgpack)
+            result = [REPLY_OK, @handler.public_send(method, *args)]
+          rescue => e
+            result = [REPLY_ERROR, "#{e.class}:#{e.message}"]
           end
+
+        ensure
+          @socket.send(result.to_msgpack)
         end
-      rescue => e
-        @pipe.shutdown
-        raise
       end
     end
   end
@@ -204,8 +200,8 @@ module MsgPipe
 
     # I have one speed, one gear: GO!
     def go!(timeout)
-      @dealer.socket.send_string([@task_id, @tasks, timeout].to_msgpack)
-      completed, timeouts = MessagePack.unpack(@dealer.socket.recv_string)
+      @dealer.socket.send([@task_id, @tasks, timeout].to_msgpack)
+      completed, timeouts = MessagePack.unpack(@dealer.socket.recv)
 
       @results = {}
       completed.each do |k, v|

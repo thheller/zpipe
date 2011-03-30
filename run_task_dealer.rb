@@ -78,41 +78,26 @@ MsgPipe.run do |pipe|
 
   task_master = TaskMaster.new()
 
-  poller = ZMQ::Poller.new()
-  poller.register_readable(frontend)
-  poller.register_readable(task_results)
-
   while true
-    poller.poll(500) # wait 500msec for some action, else check for timeouts
-
-    if poller.readables.empty?
-      # timeout and noone said anything
-      task_master.timeouts do |task|
-        puts "task: #{task.task_id} is past its deadline, returning what i got"
-
-        frontend.send_string(task.ident, ZMQ::SNDMORE)
-        frontend.send_string("", ZMQ::SNDMORE)
-        frontend.send_string([task.results, task.pending_tasks].to_msgpack)
-      end
-    else
-      poller.readables.each do |it|
+    if select_result = ZMQ.select([frontend, task_results], [], [], 0.1)
+      select_result[0].each do |it|
         case it
         when frontend
-          client_ident = frontend.recv_string # rep -> xrep
-          frontend.recv_string # empty sep "" rep -> xrep
+          client_ident = frontend.recv # rep -> xrep
+          frontend.recv # empty sep "" rep -> xrep
 
-          task_id, tasks, timeout = MessagePack.unpack(frontend.recv_string)
+          task_id, tasks, timeout = MessagePack.unpack(frontend.recv)
 
           puts "received task: #{task_id} willing to wait: #{timeout}secs"
 
           task_master.register_task(client_ident, task_id, tasks, timeout)
           tasks.each_pair do |task_name, task_call|
             puts " -> #{task_name}: #{task_call.inspect}"
-            task_queue.send_string([task_id, task_name, task_call[0], task_call[1]].to_msgpack)
+            task_queue.send([task_id, task_name, task_call[0], task_call[1]].to_msgpack)
           end
 
         when task_results
-          task_id, task_name, result = MessagePack.unpack(task_results.recv_string)
+          task_id, task_name, result = MessagePack.unpack(task_results.recv)
 
           puts "task: #{task_id} received result for #{task_name}"
           p result
@@ -121,11 +106,19 @@ MsgPipe.run do |pipe|
             puts "task: #{task_id} is done"
 
             # reply back to sender, wrap in REP envelope
-            frontend.send_string(task.ident, ZMQ::SNDMORE)
-            frontend.send_string("", ZMQ::SNDMORE)
-            frontend.send_string([task.results, []].to_msgpack)
+            frontend.send(task.ident, ZMQ::SNDMORE)
+            frontend.send("", ZMQ::SNDMORE)
+            frontend.send([task.results, []].to_msgpack)
           end
         end
+      end
+    else # timeout and noone said anything
+      task_master.timeouts do |task|
+        puts "task: #{task.task_id} is past its deadline, returning what i got"
+
+        frontend.send(task.ident, ZMQ::SNDMORE)
+        frontend.send("", ZMQ::SNDMORE)
+        frontend.send([task.results, task.pending_tasks].to_msgpack)
       end
     end
   end

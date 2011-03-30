@@ -1,11 +1,41 @@
 require './msg_pipe.rb'
 
-MsgPipe.broker!('tcp://*:7893', 'tcp://*:7894')
+# zmq gem does not seem to have device support, or i didnt find it
+# so make our own QUEUE broker, just shuffle all messages from front to back
+def forward_messages(from, to)
+  msg = from.recv()
 
-# never actually gets here ...
-# using ZMQ::QUEUE Device which simply does its thing and never returns
-#
-# basically accepts requests from clients on port 7893
-# then distributes the requests among workers on port 7894
-#
-# could just as well use ipc for the backend instead of tcp
+  while from.getsockopt(ZMQ::RCVMORE)
+    to.send(msg, ZMQ::SNDMORE)
+    msg = from.recv()
+  end
+
+  to.send(msg)
+end
+
+MsgPipe.run do |pipe|
+  
+  frontend = pipe.socket(ZMQ::XREP)
+  frontend.bind('tcp://*:7893')
+
+  backend = pipe.socket(ZMQ::XREQ)
+  backend.bind('tcp://*:7894')
+
+  puts 'starting broker action'
+
+  while true
+    if selected = ZMQ.select([frontend, backend], [], [], 1)
+
+      selected[0].each do |it|
+        case it
+        when frontend
+          forward_messages(frontend, backend)
+        when backend
+          forward_messages(backend, frontend)
+        end
+      end
+    else
+      # timeout, not gonna do anything, just wait again
+    end
+  end
+end

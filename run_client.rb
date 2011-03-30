@@ -17,7 +17,6 @@ MsgPipe.client('tcp://localhost:7893') do |client|
 
   p client.call(:echo, 'willenlos')
 
-
   begin
     client.call(:private_method)
   rescue MsgPipe::RemoteError => e

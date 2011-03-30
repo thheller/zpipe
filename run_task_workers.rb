@@ -1,13 +1,13 @@
 require './msg_pipe.rb'
 require './handler.rb'
 
+forks = []
 num_workers = 5
 num_workers.times do 
+  forks << fork do
 
-  fork do
     begin
       MsgPipe.run do |pipe|
-
         queue = pipe.socket(ZMQ::PULL)
         queue.connect("ipc://task_queue.ipc")
 
@@ -21,12 +21,12 @@ num_workers.times do
         # receives [task_id, task_name, method, [args]] messages
         # lets handler to the work
         # sends [task_id, task_name, result] off to the results
-        while msg = queue.recv_string
+        while msg = queue.recv
           task_id, task_name, method, args = MessagePack.unpack(msg)
 
           result = handler.public_send(method, *args)
 
-          results.send_string([task_id, task_name, result].to_msgpack)
+          results.send([task_id, task_name, result].to_msgpack)
         end
       end
 

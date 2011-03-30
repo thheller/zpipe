@@ -1,5 +1,4 @@
 source :gemcutter
 
-gem "ffi"
-gem "ffi-rzmq", :git => "git://github.com/chuckremes/ffi-rzmq.git"
+gem "zmq", "~> 2.1.0.1"
 gem "msgpack"

@@ -11,9 +11,9 @@ MsgPipe.contact_dealer('tcp://localhost:7896') do |dealer|
   task.add(:email, :contact_your_homies, 123, 'info@zilence.net')
   task.add(:web, :go_fetch, 'http://www.shopfiy.com')
 
-  task.go!(2) # mysql actually takes 5 sec, so we never get that
+  # task.go!(2) # mysql actually takes 5 sec, so we never get that
 
-  # task.go!(6) # let all tasks actually finish
+  task.go!(6) # let all tasks actually finish
 
   puts "Are all tasks done?"
   p task.all_done?
